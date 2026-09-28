@@ -343,7 +343,15 @@ curl http://localhost:8000/v1/chat/completions \
 
 Запуск из любой директории — `ds-chat` (alias на `~/bin/ds-chat`), а также
 вариант `Command+L` прямо в терминале Kaku — описаны в
-**[TERMINAL_CHAT.md](TERMINAL_CHAT.md)**.
+**[docs/TERMINAL_CHAT.md](docs/TERMINAL_CHAT.md)**.
+
+Демонстрация `Command+L` в Kaku (25 секунд):
+
+[![Command+L в Kaku — чат DeepSeek](docs/media/kaku-ai.png)](docs/media/kaku-ai.mp4)
+
+Видео: [`docs/media/kaku-ai.mp4`](docs/media/kaku-ai.mp4) — H.264/AAC,
+1276×992, 1.4 МБ. Превью: `docs/media/kaku-ai.png` (нажмите на картинку, чтобы
+открыть видео).
 
 ---
 
