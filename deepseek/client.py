@@ -22,6 +22,7 @@ session (see `deepseek.auth`). For each message it:
 from __future__ import annotations
 
 import json
+import re
 import threading
 from dataclasses import dataclass
 from typing import Iterator, Optional
@@ -232,21 +233,53 @@ class _Stream:
         return _encode_cid(self._session_id, self._message_id)
 
 
+_CONTENT_PATH = re.compile(r"^response/fragments/(-?\d+)/content$")
+
+
 def _parse_sse(lines, meta: Optional[dict] = None) -> Iterator[str]:
     """Turn DeepSeek's SSE completion stream into reply-text deltas.
 
     The stream sends an initial snapshot frame whose `v` is the full response
-    object (with `fragments[].content`), then a series of append frames:
+    object (with `fragments[]`), then a series of append frames:
       * {"p":"response/fragments/-1/content","o":"APPEND","v":" what"}  (sets path)
       * {"v":"'s"}                                                       (appends to it)
-    We track the active append path and emit only RESPONSE-fragment text.
+    We track the fragment list and emit only RESPONSE-fragment text.
+
+    Two details matter. Fragments arrive out of band: the snapshot carries
+    whatever exists so far (with DeepThink on, that is the THINK fragment), and
+    later `{"p":"response/fragments","o":"APPEND","v":[{...RESPONSE...}]}` adds
+    the answer. And the paths address the NEWEST fragment as `-1` — which is the
+    THINK fragment for as long as reasoning streams. So we resolve `-1` against
+    the fragments we have actually seen and emit text only for RESPONSE ones,
+    which keeps DeepThink reasoning out of the reply.
 
     If `meta` is given, the assistant's `message_id` is recorded into it (used to
     build the resumable conversation_id). The exact field location can vary, so
     we look in a few plausible spots defensively.
     """
-    active_path: Optional[str] = None
-    emitted_initial = False
+    types: list[Optional[str]] = []   # fragment type per index, in arrival order
+    active: Optional[int] = None      # index of the fragment being appended to
+    emitted: dict[int, int] = {}      # fragment index -> chars already emitted
+
+    def resolve(idx: int) -> int:
+        """Map DeepSeek's -1 ("newest fragment") onto a concrete index."""
+        return len(types) - 1 if idx == -1 else idx
+
+    def is_response(idx: Optional[int]) -> bool:
+        return idx is not None and 0 <= idx < len(types) and types[idx] == "RESPONSE"
+
+    def claim(idx: int, frag: dict) -> Iterator[str]:
+        """Yield whatever a fragment object adds beyond what we already emitted.
+
+        Snapshots and `response/fragments` frames carry whole fragment contents
+        that partly repeat what the content appends already streamed.
+        """
+        content = frag.get("content") or ""
+        seen = emitted.get(idx, 0)
+        if len(content) > seen:
+            emitted[idx] = len(content)
+            return iter(content[seen:])
+        return iter(())
 
     for line in lines:
         if not line or not line.startswith("data:"):
@@ -261,32 +294,71 @@ def _parse_sse(lines, meta: Optional[dict] = None) -> Iterator[str]:
 
         v = obj.get("v")
 
-        # Snapshot frame: full response object.
+        # Snapshot frame: the full response object, replacing what we knew.
         if isinstance(v, dict) and "response" in v:
             if meta is not None:
                 _capture_message_id(meta, v)
-            for frag in v["response"].get("fragments", []):
-                if frag.get("type") == "RESPONSE" and frag.get("content"):
-                    active_path = "response/fragments/-1/content"
-                    if not emitted_initial:
-                        emitted_initial = True
-                        yield frag["content"]
+            frags = [f for f in v["response"].get("fragments", [])
+                     if isinstance(f, dict)]
+            types = [f.get("type") for f in frags]
+            for idx, frag in enumerate(frags):
+                if frag.get("type") != "RESPONSE":
+                    continue
+                active = idx
+                yield from claim(idx, frag)
+            continue
+
+        p = obj.get("p")
+
+        # A new fragment object was appended to the list — note its type so we
+        # can tell the answer apart from DeepSeek reasoning. The answer often
+        # arrives whole inside this frame, with no content appends after it.
+        if p == "response/fragments" and obj.get("o") == "APPEND":
+            for frag in _parse_fragment_list(v):
+                idx = len(types)
+                types.append(frag.get("type"))
+                if frag.get("type") != "RESPONSE":
+                    continue
+                active = idx
+                yield from claim(idx, frag)
             continue
 
         # Path-setting append frame.
         if "p" in obj:
-            active_path = obj["p"]
-            if meta is not None and active_path.endswith("message_id") \
+            m = _CONTENT_PATH.match(p) if isinstance(p, str) else None
+            if m:
+                active = resolve(int(m.group(1)))
+            if meta is not None and isinstance(p, str) and p.endswith("message_id") \
                     and isinstance(v, int):
                 meta["message_id"] = v
-            if obj.get("o") == "APPEND" and isinstance(v, str) \
-                    and active_path.endswith("content"):
+            if obj.get("o") == "APPEND" and isinstance(v, str) and m \
+                    and is_response(active):
+                emitted[active] = emitted.get(active, 0) + len(v)
                 yield v
             continue
 
         # Bare append to the current path.
-        if isinstance(v, str) and active_path and active_path.endswith("content"):
+        if isinstance(v, str) and is_response(active):
+            emitted[active] = emitted.get(active, 0) + len(v)
             yield v
+
+
+def _parse_fragment_list(v) -> list:
+    """Read the fragment descriptors out of a `response/fragments` APPEND frame.
+
+    The payload is a JSON array of one fragment object, but tolerate a bare
+    object (or something unreadable) rather than dropping the stream.
+    """
+    if isinstance(v, str):
+        try:
+            v = json.loads(v)
+        except json.JSONDecodeError:
+            return []
+    if isinstance(v, dict):
+        return [v]
+    if isinstance(v, list):
+        return [f for f in v if isinstance(f, dict)]
+    return []
 
 
 def _capture_message_id(meta: dict, snapshot: dict) -> None:
