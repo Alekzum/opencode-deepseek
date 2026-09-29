@@ -341,8 +341,14 @@ curl http://localhost:8000/v1/chat/completions \
 на следующей. Текущий диалог и настройки сохраняются в `session/chat_state.json`,
 так что следующий запуск `./ds` его продолжит.
 
-Запуск из любой директории — `ds-chat` (alias на `~/bin/ds-chat`), а также
-вариант `Command+L` прямо в терминале Kaku — описаны в
+Запуск из любой директории — поставьте shim один раз:
+
+```bash
+mkdir -p ~/bin && ln -sf "$(pwd)/bin/ds-chat" ~/bin/ds-chat
+# убедитесь, что ~/bin в PATH
+```
+
+Вариант `Command+L` прямо в терминале Kaku — в
 **[docs/TERMINAL_CHAT.md](docs/TERMINAL_CHAT.md)**.
 
 Демонстрация `Command+L` в Kaku (25 секунд):

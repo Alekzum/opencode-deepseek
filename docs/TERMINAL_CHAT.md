@@ -13,7 +13,7 @@ DeepSeek по `Command+L` прямо в терминале Kaku.
 
 | Что | Как |
 | --- | --- |
-| Чат в терминале | `ds-chat` (из любой директории) |
+| Чат в терминале | `./ds` (или `ds-chat` после установки shim) |
 | Чат в Kaku | `Command+L` |
 | Мост для других программ | `http://localhost:8000/v1` (OpenAI-совместимый) |
 
@@ -23,10 +23,10 @@ DeepSeek по `Command+L` прямо в терминале Kaku.
 
 | Компонент | Путь | Назначение |
 | --- | --- | --- |
-| Репозиторий | `/Users/maksimlanies/git/opencode-deepseek` | код |
+| Репозиторий | `~/git/opencode-deepseek` (или ваш clone) | код |
 | Окружение | `venv/` | Python 3.12 + зависимости |
 | Launcher | `ds` | запуск REPL-чата |
-| Shim | `~/bin/ds-chat` | запуск из любой директории |
+| Shim (опционально) | `bin/ds-chat` → `~/bin/ds-chat` | запуск из любой директории |
 | Автозапуск моста | `~/Library/LaunchAgents/com.deepseek.bridge.plist` | поднимает `app.py` при входе в систему |
 | Конфиг Kaku | `~/.config/kaku/assistant.toml` | провайдер для `Command+L` |
 | Сессия | `session/session.json` | сохранённый вход |
@@ -40,7 +40,7 @@ DeepSeek по `Command+L` прямо в терминале Kaku.
 пропустить.
 
 ```bash
-cd ~/git/opencode-deepseek
+cd ~/git/opencode-deepseek   # или путь к вашему clone
 
 # 1) Окружение и зависимости
 /opt/homebrew/bin/python3.12 -m venv venv
@@ -49,6 +49,12 @@ cd ~/git/opencode-deepseek
 
 # 2) Конфиг (API-ключ не нужен)
 cp .env.example .env
+
+# 3) (опционально) shim для запуска из любой директории
+mkdir -p ~/bin
+ln -sf "$(pwd)/bin/ds-chat" ~/bin/ds-chat
+# убедитесь, что ~/bin в PATH, либо добавьте в ~/.zshrc:
+#   alias ds-chat='~/bin/ds-chat'
 ```
 
 ### Проверка, что всё на месте
@@ -83,15 +89,15 @@ cp .env.example .env
 ## 4. Чат в терминале
 
 ```bash
-ds-chat              # продолжить текущий диалог
-ds-chat --new        # начать новый диалог
+./ds                 # продолжить текущий диалог
+./ds --new           # начать новый диалог
 ```
 
-`~/bin/ds-chat` добавлен в `.zshrc` как alias — работает из любой директории.
-Эквивалент без alias:
+После установки shim (см. раздел 2) то же самое из любой директории:
 
 ```bash
-~/bin/ds-chat
+ds-chat
+ds-chat --new
 ```
 
 ### Флаги запуска
@@ -100,9 +106,9 @@ ds-chat --new        # начать новый диалог
 | --- | --- |
 | `--new` | новый диалог |
 | `--continue` | продолжить сохранённый диалог (по умолчанию) |
-| `--model default` | быстрая модель `deepseek-chat` |
-| `--model expert` | модель с рассуждениями `deepseek-expert` (DeepThink) |
-| `--think` / `--no-think` | включить/выключить рассуждения |
+| `--model default` | быстрая модель Instant (`deepseek-chat`) |
+| `--model expert` | более сильная и медленная Expert (`deepseek-expert`) |
+| `--think` / `--no-think` | включить/выключить DeepThink-рассуждения |
 | `--search` / `--no-search` | включить/выключить веб-поиск |
 
 ### Команды внутри чата
@@ -110,10 +116,10 @@ ds-chat --new        # начать новый диалог
 | Команда | Действие |
 | --- | --- |
 | `/new` | начать новый диалог |
-| `/model default` | переключить модель (сбросит рассуждения) |
-| `/model expert` | переключить на модель с рассуждениями |
-| `/think` | показать текущее состояние рассуждений |
-| `/search` | показать текущее состояние веб-поиска |
+| `/model default` | переключить на быструю Instant |
+| `/model expert` | переключить на более сильную Expert (начинает новый диалог) |
+| `/think` | переключить DeepThink-рассуждения |
+| `/search` | переключить веб-поиск |
 | `/status` | диалог, модель, рассуждения, поиск |
 | `/help` | список команд |
 | `/exit` | выйти |
@@ -148,7 +154,7 @@ base_url = "http://localhost:8000/v1"
 ```
 
 `chat_model_choices` включает переключение моделей прямо в оверлее Kaku:
-`deepseek-chat` — быстрые ответы, `deepseek-expert` — с рассуждениями.
+`deepseek-chat` — быстрые ответы, `deepseek-expert` — сильнее и медленнее.
 
 Kaku перечитывает конфиг автоматически. Проверить: нажмите `Command+L` — должен
 открыться AI-чат.
@@ -236,7 +242,8 @@ launchd-plist: GUI-приложения и launchd не наследуют пе�
 Если прокси у вас на другом порту, поменяйте `7897` в трёх местах:
 
 1. `~/Library/LaunchAgents/com.deepseek.bridge.plist` → `EnvironmentVariables`
-2. `~/bin/ds-chat` → значения по умолчанию
+2. `bin/ds-chat` / `~/bin/ds-chat` (если установлен) — при необходимости задайте
+   `http_proxy` / `https_proxy` / `all_proxy` в окружении перед запуском
 3. `~/.zshrc` → `http_proxy` / `https_proxy` / `all_proxy`
 
 ---
@@ -246,7 +253,7 @@ launchd-plist: GUI-приложения и launchd не наследуют пе�
 | Слой | Код |
 | --- | --- |
 | REPL-чат | `chat.py` |
-| Launcher | `ds`, `~/bin/ds-chat` |
+| Launcher | `ds`, `bin/ds-chat` |
 | HTTP-мост | `app.py`, `server/api.py` |
 | Клиент веб-чата | `deepseek/client.py` (SSE + PoW через Wasmtime) |
 | Авторизация | `deepseek/auth.py` (Playwright) |

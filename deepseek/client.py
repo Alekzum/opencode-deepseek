@@ -341,12 +341,6 @@ def _parse_sse(lines, meta: Optional[dict] = None) -> Iterator[str]:
         if isinstance(v, str) and is_response(active):
             emitted[active] = emitted.get(active, 0) + len(v)
             yield v
-            continue
-
-        # Bare append to the current path.
-        if isinstance(v, str) and is_response(active):
-            emitted += len(v)
-            yield v
 
 
 def _parse_fragment_list(v) -> list:

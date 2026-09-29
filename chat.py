@@ -159,7 +159,7 @@ HELP = _c(BOLD, "commands") + """
   /status           show the current model and toggles
   /exit             leave (Ctrl-D works too)
 
-  Multi-line input: end a line with a single \\\\ to continue on the next one.
+  Multi-line input: end a line with a single \\ to continue on the next one.
 """
 
 
